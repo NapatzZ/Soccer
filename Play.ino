@@ -43,7 +43,7 @@ void playStateMachine(int   goalID,
         goalX = huskylens.blockInfo[goalID][0].x;
         goalY = huskylens.blockInfo[goalID][0].y;
       }
-      for (int i = 0; i < 8; i++) if (getIMU()) break;
+      while (Serial1.available()) getIMU();
     }
 
     // ── State machine ────────────────────────────────────────

@@ -18,7 +18,6 @@ POP32_Huskylens huskylens;
 #define degToRad    0.0174f
 const float sin30 = 0.5f;
 const float cos30 = 0.8660254f;
-float thetaRad, vx, vy, spd1, spd2, spd3;
 
 // ── Wall sensors ──────────────────────────────────────────────
 int low[3]  = { 400, 390, 590 };
@@ -62,6 +61,3 @@ uint8_t rxCnt = 0, rxBuf[8];
 #define limPin    A0
 #define reloadSpd -100
 
-// ── Legacy globals (kept for compatibility) ───────────────────
-float vecCurve, radCurve;
-int   discoveState = 1;

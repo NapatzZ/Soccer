@@ -77,13 +77,12 @@ void wheel(int s1, int s2, int s3) {
 }
 
 void holonomic(float spd, float theta, float omega) {
-  thetaRad = theta * degToRad;
-  vx   = spd * cos(thetaRad);
-  vy   = spd * sin(thetaRad);
-  spd1 =  vy * cos30 - vx * sin30 + omega;
-  spd2 = -vy * cos30 - vx * sin30 + omega;
-  spd3 =  vx + omega;
-  wheel(spd1, spd2, spd3);
+  float rad = theta * degToRad;
+  float vx  = spd * cos(rad);
+  float vy  = spd * sin(rad);
+  wheel( vy * cos30 - vx * sin30 + omega,
+        -vy * cos30 - vx * sin30 + omega,
+         vx + omega);
 }
 
 void heading(float spd, float theta, float spYaw) {
@@ -132,6 +131,7 @@ void setup() {
   drawSplash();
   delay(2300);
   reload();
+  Wire.setClock(400000);
   while (!huskylens.begin(Wire)) {
     oled.clearDisplay();
     oled.textSize(1);
