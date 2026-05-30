@@ -192,42 +192,13 @@ void drawSensorDebugUI(int a1, int a2, int a3) {
 //  Row 7  │  ===YELLOW=== or ---BLUE---
 //
 void drawModeStart(unsigned int k, const char* title) {
-  char buf[22];
-  const char* border = _teamBorder[k];
-
-  // role label
-  const char* role = "";
-  if      (k == 1 || k == 2) role = "Role : ATTACKER";
-  else if (k == 3 || k == 4) role = "Role : DEFENDER";
-  else if (k == 5)            role = "Role : GOALKEEPER";
-  else if (k == 6)            role = "Role : PENALTY";
-
   oled.clearDisplay();
   oled.textSize(1);
-  oled.text(0, 0, border);
-
-  // title + team tag (large)
+  oled.text(0, 0, _teamBorder[k]);
   oled.textSize(2);
-  if (_teamTag[k][0] != '\0') {
-    snprintf(buf, sizeof(buf), "%s%s", title, _teamTag[k]);
-    oled.text(1, 0, buf);
-  } else {
-    oled.text(1, 0, title);
-  }
-
+  oled.text(2, 0, title);
   oled.textSize(1);
-  oled.text(3, 2, role);
-  if (_teamName[k][0] != '\0') {
-    snprintf(buf, sizeof(buf), " Team : %s", _teamName[k]);
-    oled.text(4, 2, buf);
-    snprintf(buf, sizeof(buf), " Goal : ID %d", _goalID[k]);
-    oled.text(5, 2, buf);
-  } else {
-    oled.text(4, 0, "");
-    oled.text(5, 0, "");
-  }
-  oled.text(6, 2, " Kicker: READY");
-  oled.text(7, 0, border);
+  oled.text(7, 0, _teamBorder[k]);
   oled.show();
   delay(1500);
 }
