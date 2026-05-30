@@ -88,7 +88,7 @@ void playStateMachine(int   goalID,
         {
           float dir   = (lastYaw < 0) ? 0.0f  : 180.0f;
           float omega = (lastYaw < 0) ? 25.0f : -25.0f;
-          holonomic(55, dir, omega * curveScale);
+          holonomic(35, dir, omega * curveScale);
         }
         if (abs(pvYaw) < alignErrorGap && abs(sp_rot - ballPosX) < rotErrorGap)
           state = APPROACH;
@@ -97,6 +97,8 @@ void playStateMachine(int   goalID,
       // ── APPROACH: drive toward goal + shoot when close ────
       case APPROACH:
         if (!hasBall) { state = SEARCH; break; }
+        // ball drifted too far during ALIGN — re-approach before shooting
+        if (ballPosY < spFli - 30) { resetPID(); state = TRACK; break; }
         if (goalY < goalFli) {
           // goal not visible yet — push forward to find it
           getIMU();

@@ -9,10 +9,10 @@ float goalAngle(int gX, int gY, bool isFront) {
 // ── IMU ───────────────────────────────────────────────────────
 void zeroYaw() {
   Serial1.begin(115200);
-  delay(100);
-  Serial1.write(0XA5); delay(100); Serial1.write(0X54); delay(100);
-  Serial1.write(0XA5); delay(100); Serial1.write(0X55); delay(100);
-  Serial1.write(0XA5); delay(100); Serial1.write(0X52); delay(100);
+  delay(50);
+  Serial1.write(0XA5); delay(50); Serial1.write(0X54); delay(50);
+  Serial1.write(0XA5); delay(50); Serial1.write(0X55); delay(50);
+  Serial1.write(0XA5); delay(50); Serial1.write(0X52); delay(50);
 }
 
 bool getIMU() {
@@ -41,7 +41,7 @@ void Auto_zero() {
   getIMU();
   unsigned long timer = millis();
   pvYaw = 90.0f;
-  while (abs(pvYaw) > 0.05) {
+  while (abs(pvYaw) > 0.3) {
     if (getIMU()) {
       drawAutoZeroUI(pvYaw, retrying);
       if (millis() - timer > 5000) {

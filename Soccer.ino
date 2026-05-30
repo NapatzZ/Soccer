@@ -29,8 +29,8 @@ int mid[3]  = { (low[0]+high[0])/2, (low[1]+high[1])/2, (low[2]+high[2])/2 };
 #define rot_Kp      0.6
 #define rot_Ki      0.0
 #define rot_Kd      0.6
-#define sp_rot      155
-#define rotErrorGap 15
+#define sp_rot      160
+#define rotErrorGap 30
 #define idleSpd     65
 float rot_error, rot_pError, rot_i, rot_d, rot_w;
 
