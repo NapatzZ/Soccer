@@ -119,6 +119,8 @@ void playStateMachine(int   goalID,
 
       // ── SHOOT: fire + reload + back to TRACK ─────────────
       case SHOOT:
+        holonomic(50, 90, 0);
+        delay(150);
         beep();
         shoot();
         wheel(0, 0, 0);
