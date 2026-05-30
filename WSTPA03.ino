@@ -56,6 +56,23 @@ void Auto_zero() {
   oled.show();
 }
 
+// ── DEF delayed start ─────────────────────────────────────────
+// Wait up to 3.1s (total 4.6s with drawModeStart 1.5s).
+// Exits early if ball moves more than 20px from its starting position.
+void waitDefStart() {
+  huskylens.updateBlocks();
+  int initX = huskylens.blockSize[1] ? huskylens.blockInfo[1][0].x : 160;
+  int initY = huskylens.blockSize[1] ? huskylens.blockInfo[1][0].y : 120;
+
+  unsigned long t = millis();
+  while (millis() - t < 3100) {
+    huskylens.updateBlocks();
+    if (!huskylens.blockSize[1]) continue;
+    if (abs(huskylens.blockInfo[1][0].x - initX) > 20 ||
+        abs(huskylens.blockInfo[1][0].y - initY) > 20) break;
+  }
+}
+
 // ── PID / wall helpers ────────────────────────────────────────
 void resetPID() {
   rot_error = rot_pError = rot_i = rot_d = rot_w = 0.0f;
@@ -173,11 +190,11 @@ void setup() {
     playStateMachine(3, 1.2f, 60.0f, 1.5f, 20.0f);
   } else if (k == 3) {
     drawModeStart(3, "DEF-YEL");
-    delay(3200);
+    waitDefStart();
     playStateMachine(2, 1.2f, 60.0f, 1.2f, 13.0f);
   } else if (k == 4) {
     drawModeStart(4, "DEF-BLU");
-    delay(3200);
+    waitDefStart();
     playStateMachine(3, 1.2f, 40.0f, 1.2f, 13.0f);
   } else if (k == 5) {
     drawModeStart(5, "GOALKEEP");
