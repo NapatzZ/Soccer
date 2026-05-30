@@ -9,6 +9,7 @@
 void goalkeeperStateMachine() {
   enum State { SEARCH, TRACK };
   State state = SEARCH;
+  float scanDir = 1.0f;
 
   while (1) {
 
@@ -16,13 +17,16 @@ void goalkeeperStateMachine() {
     if (checkWall()) continue;
 
     bool hasBall = huskylens.updateBlocks() && huskylens.blockSize[1];
+    if (hasBall) getIMU();
 
     switch (state) {
 
-      // ── SEARCH: spin until ball found ─────────────────────
+      // ── SEARCH: sweep 0–180° (bounce at ±85°) ────────────
       case SEARCH:
         if (hasBall) { state = TRACK; break; }
-        holonomic(0, 0, idleSpd);
+        if (pvYaw >=  85.0f) scanDir = -1.0f;
+        if (pvYaw <= -85.0f) scanDir =  1.0f;
+        holonomic(0, 0, scanDir * idleSpd);
         break;
 
       // ── TRACK: P-control on ball X axis ──────────────────
@@ -30,7 +34,6 @@ void goalkeeperStateMachine() {
         if (!hasBall) { state = SEARCH; break; }
         {
           ballPosX = huskylens.blockInfo[1][0].x;
-          getIMU();
 
           rot_error = sp_rot - ballPosX;
           rot_w     = constrain(rot_error * rot_Kp, -100, 100);
