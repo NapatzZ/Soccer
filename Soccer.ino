@@ -34,6 +34,7 @@ int mid[3]  = { (low[0]+high[0])/2, (low[1]+high[1])/2, (low[2]+high[2])/2 };
 float rot_error, rot_pError, rot_i, rot_d, rot_w;
 
 // ── Approach PID (ball Y distance) ───────────────────────────
+#define minApproachSpd 20   // minimum speed to overcome motor dead zone
 #define fli_Kp        0.9
 #define fli_Ki        0.0
 #define fli_Kd        0.0

@@ -71,6 +71,8 @@ void playStateMachine(int   goalID,
         fli_spd    = constrain(fli_error * fli_Kp
                              + fli_i     * fli_Ki
                              + fli_d     * fli_Kd, -100, 100);
+        if      (fli_spd >  0 && fli_spd <  minApproachSpd) fli_spd =  minApproachSpd;
+        else if (fli_spd < -0 && fli_spd > -minApproachSpd) fli_spd = -minApproachSpd;
 
         holonomic(fli_spd, 90, rot_w);
 
