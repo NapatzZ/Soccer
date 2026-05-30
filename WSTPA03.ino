@@ -98,25 +98,37 @@ bool getIMU() {
   return false;
 }
 void Auto_zero() {
+  bool retrying = false;
   zeroYaw();
   getIMU();
   unsigned long timer = millis();
-  oled.clear();
-  oled.text(1, 2, "Setting zero");
   pvYaw = 90.0f;
-  while (abs(pvYaw) > 0.05) {  //วนทำซ้ำจนกว่าองศาจะน้อยกว่า 0.05
+  while (abs(pvYaw) > 0.05) {
     if (getIMU()) {
-      oled.text(3, 6, "Yaw: %f  ", pvYaw);
-      oled.show();
-      if (millis() - timer > 5000) {  //เวลาเกิน 5 วิให้ zeroYaw อีกครั้ง
+      drawAutoZeroUI(pvYaw, retrying);
+      if (millis() - timer > 5000) {
         zeroYaw();
         timer = millis();
+        retrying = true;
       }
     }
   }
+  drawAutoZeroDone();
   oled.clear();
   oled.show();
 }
+void resetPID() {
+  rot_error = rot_pError = rot_i = rot_d = rot_w = 0.0f;
+  fli_error = fli_pError = fli_i = fli_d = fli_spd = 0.0f;
+}
+
+bool checkWall() {
+  if (analog(2) > mid[1]) { beep(); holonomic(60, 270, 0); delay(500); return true; }
+  if (analog(1) > mid[0]) { beep(); holonomic(60,   0, 0); delay(500); return true; }
+  if (analog(3) > mid[2]) { beep(); holonomic(60, 180, 0); delay(500); return true; }
+  return false;
+}
+
 void wheel(int s1, int s2, int s3) {
   motor(1, s1);
   motor(2, s2);
@@ -171,18 +183,23 @@ void reload() {
 }
 void setup() {
   SW_A();
+  drawSplash();
   delay(2300);
   reload();
   while (!huskylens.begin(Wire)) {
-    oled.text(1, 0, "Begin failed!");
+    oled.clearDisplay();
+    oled.textSize(1);
+    oled.text(0, 0, "====================");
+    oled.text(3, 10, "!! ERROR !!");
+    oled.text(5, 2, "HuskyLens failed");
+    oled.text(6, 2, "Check I2C cable");
+    oled.text(7, 0, "====================");
     oled.show();
     delay(100);
   }
   delay(3000);
   pvYaw = 90.0f;
-  oled.text(0, 0, "SW_B => IMU");
-  oled.text(1, 0, "SW_A => Testshoot");
-  oled.show();
+  drawReadyUI();
   while (!SW_B()) {
     if (SW_A()) {
       shoot();
@@ -204,37 +221,32 @@ void setup() {
   };
   while (!SW_OK()) {
     k = knob(0, 6);
-    oled.clearDisplay();
-    oled.textSize(1);
-    if (k > 0) oled.text(0, 1, menu[k-1]);
-    oled.textSize(2);
-    oled.text(1, 0, menu[k]);
-    oled.textSize(1);
-    if (k < 6) oled.text(5, 1, menu[k+1]);
-    oled.show();
+    drawMenuUI(k, menu, 7);
   }
   if (k == 0) {
     while (1) {
-      oled.clearDisplay();
-      oled.text(0, 0, "%d", analog(1));
-      oled.text(1, 0, "%d", analog(2));
-      oled.text(2, 0, "%d", analog(3));
-      oled.show();
+      drawSensorDebugUI(analog(1), analog(2), analog(3));
     }
   } else if (k == 1) {
-    FootballYellow1();
+    drawModeStart(1, "ATK-YEL");
+    playStateMachine(2, 1.0f, 40.0f, 1.5f, 15.0f);
   } else if (k == 2) {
-    FootballYellow2();
+    drawModeStart(2, "ATK-BLU");
+    playStateMachine(3, 1.2f, 60.0f, 1.5f, 20.0f);
   } else if (k == 3) {
-    delay(4700);
-    FootballYellow3();
+    drawModeStart(3, "DEF-YEL");
+    delay(3200);
+    playStateMachine(2, 1.2f, 60.0f, 1.2f, 13.0f);
   } else if (k == 4) {
-    delay(4700);
-    FootballYellow4();
+    drawModeStart(4, "DEF-BLU");
+    delay(3200);
+    playStateMachine(3, 1.2f, 40.0f, 1.2f, 13.0f);
   } else if (k == 5) {
-    GOAL();
+    drawModeStart(5, "GOALKEEP");
+    goalkeeperStateMachine();
   } else if (k == 6) {
-    PENALTY();
+    drawModeStart(6, "PENALTY");
+    penaltyStateMachine();
   }
 
 }
