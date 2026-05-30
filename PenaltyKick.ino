@@ -67,8 +67,8 @@ void penaltyStateMachine() {
       case ALIGN:
         if (!hasBall) { state = SEARCH; break; }
         {
-          float dir   = (lastYaw < 0) ? 0.0f  : 180.0f;
-          float omega = (lastYaw < 0) ? 15.0f : -15.0f;
+          float dir   = (pvYaw < 0) ? 0.0f  : 180.0f;
+          float omega = (pvYaw < 0) ? 15.0f : -15.0f;
           holonomic(55, dir, omega);
         }
         if (abs(pvYaw) < alignErrorGap && abs(sp_rot - ballPosX) < rotErrorGap)

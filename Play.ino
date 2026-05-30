@@ -88,8 +88,8 @@ void playStateMachine(int   goalID,
       case ALIGN:
         if (!hasBall) { state = SEARCH; break; }
         {
-          float dir   = (lastYaw < 0) ? 0.0f  : 180.0f;
-          float omega = (lastYaw < 0) ? 25.0f : -25.0f;
+          float dir   = (pvYaw < 0) ? 0.0f  : 180.0f;
+          float omega = (pvYaw < 0) ? 25.0f : -25.0f;
           holonomic(35, dir, omega * curveScale);
         }
         if (abs(pvYaw) < alignErrorGap && abs(sp_rot - ballPosX) < rotErrorGap)
