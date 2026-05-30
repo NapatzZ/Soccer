@@ -23,7 +23,7 @@ void penaltyStateMachine() {
     if (hasBall) {
       ballPosX = huskylens.blockInfo[1][0].x;
       ballPosY = huskylens.blockInfo[1][0].y;
-      while (Serial1.available()) getIMU();
+      for (int i = 0; i < 8; i++) if (getIMU()) break;
     }
 
     switch (state) {
