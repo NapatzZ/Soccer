@@ -1,3 +1,8 @@
+// ── Hardware.ino — IMU, drive, kicker, setup ──────────────────
+// Renamed from WSTPA03.ino. Contains all hardware utilities and
+// the Arduino setup() / loop() entry points.
+// ─────────────────────────────────────────────────────────────
+
 // ── goalAngle ─────────────────────────────────────────────────
 // Maps HuskyLens goal pixel X (0–320) to holonomic angle (0–180°)
 float goalAngle(int gX, int gY, bool isFront) {
@@ -74,9 +79,64 @@ void waitDefStart() {
 }
 
 // ── PID / wall helpers ────────────────────────────────────────
+bool validateBall(bool applyDelta) {
+  if (!huskylens.blockSize[1]) return false;
+  int x = huskylens.blockInfo[1][0].x;
+  int y = huskylens.blockInfo[1][0].y;
+  int w = huskylens.blockInfo[1][0].width;
+  int h = huskylens.blockInfo[1][0].height;
+  if (w < ballSizeMin || w > ballSizeMax) return false;
+  if (h < ballSizeMin || h > ballSizeMax) return false;
+  if (abs(w - h) > (w >> 1)) return false;
+  if (applyDelta && (abs(x - ballPosX) > ballMaxJump ||
+                     abs(y - ballPosY) > ballMaxJump)) return false;
+  ballPosX = x;
+  ballPosY = y;
+  return true;
+}
+
 void resetPID() {
   rot_error = rot_pError = rot_i = rot_d = rot_w = 0.0f;
   fli_error = fli_pError = fli_i = fli_d = fli_spd = 0.0f;
+}
+
+float preventDeadzone(float spd) {
+  if (spd > 0 && spd <  minApproachSpd) return  minApproachSpd;
+  if (spd < 0 && spd > -minApproachSpd) return -minApproachSpd;
+  return spd;
+}
+
+void searchSpin() {
+  holonomic(0, 0, (sp_rot - ballPosX >= 0 ? 1 : -1) * idleSpd);
+}
+
+bool trackToBall() {
+  trackBallPID();
+  if (abs(rot_error) < rotErrorGap && abs(fli_error) < flingErrorGap) {
+    wheel(0, 0, 0);
+    lastYaw = pvYaw;
+    resetPID();
+    return true;
+  }
+  return false;
+}
+
+void trackBallPID() {
+  rot_error  = sp_rot - ballPosX;
+  rot_d      = rot_error - rot_pError;
+  rot_pError = rot_error;
+  rot_w      = constrain(rot_error * rot_Kp + rot_d * rot_Kd, -100, 100);
+
+  fli_error  = spFli - ballPosY;
+  fli_i      = constrain(fli_i + fli_error, -100, 100);
+  fli_d      = fli_error - fli_pError;
+  fli_pError = fli_error;
+  fli_spd    = constrain(fli_error * fli_Kp
+                       + fli_i     * fli_Ki
+                       + fli_d     * fli_Kd, -100, 100);
+  fli_spd = preventDeadzone(fli_spd);
+
+  holonomic(fli_spd, 90, rot_w);
 }
 
 bool checkWall() {
@@ -184,7 +244,7 @@ void setup() {
     while (1) drawSensorDebugUI(analog(1), analog(2), analog(3));
   } else if (k == 1) {
     drawModeStart(1, "ATK-YEL");
-    playStateMachine(2, 1.0f, 40.0f, 1.5f, 15.0f);
+    playStateMachine(2, 1.4f, 40.0f, 1.5f, 15.0f);
   } else if (k == 2) {
     drawModeStart(2, "ATK-BLU");
     playStateMachine(3, 1.2f, 60.0f, 1.5f, 20.0f);

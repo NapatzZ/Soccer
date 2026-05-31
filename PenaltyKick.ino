@@ -3,96 +3,94 @@
 //
 //  States:
 //    SEARCH  → no ball: spin to find
-//    TRACK   → PID center X + approach Y (same as attacker)
-//    ALIGN   → curve body to aim straight
+//    TRACK   → PID center X + approach Y
+//    ALIGN   → curve body to aim straight (yaw → 0°)
 //    CHARGE  → full speed straight + shoot
-//    DONE    → wait for SW_A before next kick
+//    DONE    → hold until SW_A for next kick
+//
+//  Vision buffer: ball must be missing 3+ frames before hasBall
+//  flips false, preventing single-frame dropout from resetting state.
 // ─────────────────────────────────────────────────────────────
 
-void penaltyStateMachine() {
-  enum State { SEARCH, TRACK, ALIGN, CHARGE, DONE };
-  State state = SEARCH;
+enum PenState  { PN_SEARCH, PN_TRACK, PN_ALIGN, PN_CHARGE,   PN_DONE  };
+
+// ── State handlers ────────────────────────────────────────────
+
+PenState penSearch(bool hasBall) {
+  if (hasBall) { resetPID(); return PN_TRACK; }
+  searchSpin();
+  return PN_SEARCH;
+}
+
+PenState penTrack(bool hasBall) {
+  if (!hasBall) return PN_SEARCH;
+  if (trackToBall()) return PN_ALIGN;
+  return PN_TRACK;
+}
+
+PenState penAlign(bool hasBall) {
+  if (!hasBall) return PN_SEARCH;
+  float dir   = (pvYaw < 0) ? 0.0f  : 180.0f;
+  float omega = (pvYaw < 0) ? 15.0f : -15.0f;
+  holonomic(55, dir, omega);
+  if (abs(pvYaw) < alignErrorGap && abs(sp_rot - ballPosX) < rotErrorGap)
+    return PN_CHARGE;
+  return PN_ALIGN;
+}
+
+PenState penCharge() {
+  holonomic(90, 90, 0);
+  delay(300);
+  beep();
+  shoot();
+  reload();
+  wheel(0, 0, 0);
+  return PN_DONE;
+}
+
+PenState penDone(int &ballMissFrames, int &ballConfirmFrames) {
+  wheel(0, 0, 0);
+  waitSW_A_bmp();
   resetPID();
+  ballMissFrames    = 0;
+  ballConfirmFrames = 0;
+  return PN_SEARCH;
+}
+
+// ── Orchestrator ──────────────────────────────────────────────
+
+void penaltyStateMachine() {
+  PenState state = PN_SEARCH;
+  resetPID();
+  int ballMissFrames    = 0;
+  int ballConfirmFrames = 0;
 
   while (1) {
 
-    // ── Wall bounce ──────────────────────────────────────────
+    // ── Wall bounce (highest priority) ───────────────────────
     if (checkWall()) continue;
 
-    bool hasBall = huskylens.updateBlocks() && huskylens.blockSize[1];
-    if (hasBall) {
-      ballPosX = huskylens.blockInfo[1][0].x;
-      ballPosY = huskylens.blockInfo[1][0].y;
+    // ── Sensor read + vision filters ─────────────────────────
+    huskylens.updateBlocks();
+    bool rawBall = validateBall(ballMissFrames == 0);
+    if (rawBall) {
+      ballMissFrames = 0;
+      if (ballConfirmFrames < ballConfirmMin) ballConfirmFrames++;
       for (int i = 0; i < 8; i++) if (getIMU()) break;
+    } else {
+      ballMissFrames++;
+      if (ballMissFrames > ballMissMax) ballConfirmFrames = 0;
     }
+    bool hasBall = (ballConfirmFrames >= ballConfirmMin) &&
+                   (ballMissFrames    <= ballMissMax);
 
+    // ── Dispatch ─────────────────────────────────────────────
     switch (state) {
-
-      // ── SEARCH ────────────────────────────────────────────
-      case SEARCH:
-        if (hasBall) { resetPID(); state = TRACK; break; }
-        holonomic(0, 0, (sp_rot - ballPosX >= 0 ? 1 : -1) * idleSpd);
-        break;
-
-      // ── TRACK ─────────────────────────────────────────────
-      case TRACK:
-        if (!hasBall) { state = SEARCH; break; }
-
-        rot_error  = sp_rot - ballPosX;
-        rot_d      = rot_error - rot_pError;
-        rot_pError = rot_error;
-        rot_w      = constrain(rot_error * rot_Kp + rot_d * rot_Kd, -100, 100);
-
-        fli_error  = spFli - ballPosY;
-        fli_i      = constrain(fli_i + fli_error, -100, 100);
-        fli_d      = fli_error - fli_pError;
-        fli_pError = fli_error;
-        fli_spd    = constrain(fli_error * fli_Kp
-                             + fli_i     * fli_Ki
-                             + fli_d     * fli_Kd, -100, 100);
-        if      (fli_spd >  0 && fli_spd <  minApproachSpd) fli_spd =  minApproachSpd;
-        else if (fli_spd < -0 && fli_spd > -minApproachSpd) fli_spd = -minApproachSpd;
-
-        holonomic(fli_spd, 90, rot_w);
-
-        if (abs(rot_error) < rotErrorGap && abs(fli_error) < flingErrorGap) {
-          wheel(0, 0, 0);
-          lastYaw = pvYaw;
-          resetPID();
-          state = ALIGN;
-        }
-        break;
-
-      // ── ALIGN: rotate to straight-ahead ──────────────────
-      case ALIGN:
-        if (!hasBall) { state = SEARCH; break; }
-        {
-          float dir   = (pvYaw < 0) ? 0.0f  : 180.0f;
-          float omega = (pvYaw < 0) ? 15.0f : -15.0f;
-          holonomic(55, dir, omega);
-        }
-        if (abs(pvYaw) < alignErrorGap && abs(sp_rot - ballPosX) < rotErrorGap)
-          state = CHARGE;
-        break;
-
-      // ── CHARGE: full speed + shoot ────────────────────────
-      case CHARGE:
-        holonomic(90, 90, 0);
-        delay(300);
-        beep();
-        shoot();
-        reload();
-        wheel(0, 0, 0);
-        state = DONE;
-        break;
-
-      // ── DONE: hold until SW_A pressed for next kick ───────
-      case DONE:
-        wheel(0, 0, 0);
-        waitSW_A_bmp();
-        resetPID();
-        state = SEARCH;
-        break;
+      case PN_SEARCH: state = penSearch(hasBall);          break;
+      case PN_TRACK:  state = penTrack(hasBall);           break;
+      case PN_ALIGN:  state = penAlign(hasBall);           break;
+      case PN_CHARGE: state = penCharge();                 break;
+      case PN_DONE:   state = penDone(ballMissFrames, ballConfirmFrames);     break;
     }
   }
 }

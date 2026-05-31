@@ -1,133 +1,124 @@
 // ─────────────────────────────────────────────────────────────
-//  Play.ino — Unified Attacker / Defender state machine
+//  Play.ino — Attacker / Defender state machine
 //
 //  States:
-//    SEARCH   → no ball: spin toward last known position
-//    TRACK    → ball found: PID center X + approach Y
-//    ALIGN    → ball close+centered: curve body to face goal
-//    APPROACH → aligned: drive toward goal
-//    SHOOT    → goal in range: fire + reload
+//    SEARCH   -> no ball: spin toward last known position
+//    TRACK    -> ball found: PID center X + approach Y
+//    ALIGN    -> ball close+centered: curve body to face goal
+//    APPROACH -> aligned: drive toward goal
+//    SHOOT    -> goal in range: fire + reload
 //
-//  Call:
-//    playStateMachine(goalID, curveScale, approachSpd, omegaScale, shootOffset)
-//
-//  Presets (use in WSTPA03.ino):
-//    ATK-Yellow  playStateMachine(2, 1.0f, 40.0f, 1.5f, 15.0f)
+//  Presets (called from Hardware.ino setup):
+//    ATK-Yellow  playStateMachine(2, 1.4f, 40.0f, 1.5f, 15.0f)
 //    ATK-Blue    playStateMachine(3, 1.2f, 60.0f, 1.5f, 20.0f)
 //    DEF-Yellow  playStateMachine(2, 1.2f, 60.0f, 1.2f, 13.0f)
 //    DEF-Blue    playStateMachine(3, 1.2f, 40.0f, 1.2f, 13.0f)
 // ─────────────────────────────────────────────────────────────
 
-void playStateMachine(int   goalID,
-                      float curveScale,
-                      float approachSpd,
-                      float omegaScale,
-                      float shootOffset) {
+enum PlayState { PS_SEARCH, PS_TRACK, PS_ALIGN, PS_APPROACH, PS_SHOOT };
 
-  enum State { SEARCH, TRACK, ALIGN, APPROACH, SHOOT };
-  State state = SEARCH;
+// ── State handlers ────────────────────────────────────────────
+
+PlayState playSearch(bool hasBall) {
+  if (hasBall) { resetPID(); return PS_TRACK; }
+  searchSpin();
+  return PS_SEARCH;
+}
+
+PlayState playTrack(bool hasBall) {
+  if (!hasBall) return PS_SEARCH;
+  if (trackToBall()) return PS_ALIGN;
+  return PS_TRACK;
+}
+
+PlayState playAlign(bool hasBall, float orbitRadius) {
+  if (!hasBall) return PS_SEARCH;
+  float dir   = (pvYaw < 0) ? 0.0f   : 180.0f;
+  float omega = (pvYaw < 0) ? 25.0f  : -25.0f;
+  holonomic(orbitRadius * 25.0f, dir, omega);
+  if (abs(pvYaw) < alignErrorGap && abs(sp_rot - ballPosX) < rotErrorGap)
+    return PS_APPROACH;
+  return PS_ALIGN;
+}
+
+PlayState playApproach(bool hasBall, float driveSpeed,
+                       float steerScale, float shootDist) {
+  if (!hasBall) return PS_SEARCH;
+  if (ballPosY < spFli - 30) { resetPID(); return PS_TRACK; }
+  if (goalY < goalFli) {
+    getIMU();
+    heading(90, 90, 0);
+    delay(555);
+    return PS_TRACK;
+  }
+  float goalDeg = goalAngle(goalX, goalY, 1);
+  float spGoal  = -constrain((goalDeg - 90.0f) * 0.9f, -50.0f, 50.0f);
+  holonomic(driveSpeed, goalDeg, spGoal * steerScale);
+  if (goalY >= goalFli + shootDist) return PS_SHOOT;
+  return PS_APPROACH;
+}
+
+PlayState playShoot() {
+  holonomic(50, 90, 0);
+  delay(150);
+  beep();
+  shoot();
+  wheel(0, 0, 0);
+  reload();
   resetPID();
+  return PS_TRACK;
+}
+
+// ── Orchestrator ──────────────────────────────────────────────
+
+void playStateMachine(int   goalID,
+                      float orbitRadius,
+                      float driveSpeed,
+                      float steerScale,
+                      float shootDist) {
+
+  PlayState state = PS_SEARCH;
+  resetPID();
+  int ballMissFrames    = 0;
+  int ballConfirmFrames = 0;
+  int goalMissFrames    = 0;
 
   while (1) {
 
-    // ── Wall bounce (highest priority) ──────────────────────
+    // ── Wall bounce (highest priority) ───────────────────────
     if (checkWall()) continue;
 
-    // ── Sensor read ─────────────────────────────────────────
-    bool hasBall = huskylens.updateBlocks() && huskylens.blockSize[1];
-    if (hasBall) {
-      ballPosX = huskylens.blockInfo[1][0].x;
-      ballPosY = huskylens.blockInfo[1][0].y;
-      goalX = 0;  goalY = 0;
+    // ── Sensor read + vision filters ─────────────────────────
+    huskylens.updateBlocks();
+    bool rawBall = validateBall(ballMissFrames == 0);
+    if (rawBall) {
+      ballMissFrames = 0;
+      if (ballConfirmFrames < ballConfirmMin) ballConfirmFrames++;
+
       if (huskylens.blockSize[goalID]) {
         goalX = huskylens.blockInfo[goalID][0].x;
         goalY = huskylens.blockInfo[goalID][0].y;
+        goalMissFrames = 0;
+      } else {
+        goalMissFrames++;
+        if (goalMissFrames > goalMissMax) { goalX = 0; goalY = 0; }
       }
+
       for (int i = 0; i < 8; i++) if (getIMU()) break;
+    } else {
+      ballMissFrames++;
+      if (ballMissFrames > ballMissMax) ballConfirmFrames = 0;
     }
+    bool hasBall = (ballConfirmFrames >= ballConfirmMin) &&
+                   (ballMissFrames    <= ballMissMax);
 
-    // ── State machine ────────────────────────────────────────
+    // ── Dispatch ─────────────────────────────────────────────
     switch (state) {
-
-      // ── SEARCH: spin to find ball ─────────────────────────
-      case SEARCH:
-        if (hasBall) { resetPID(); state = TRACK; break; }
-        holonomic(0, 0, (sp_rot - ballPosX >= 0 ? 1 : -1) * idleSpd);
-        break;
-
-      // ── TRACK: PID approach ball ──────────────────────────
-      case TRACK:
-        if (!hasBall) { state = SEARCH; break; }
-
-        rot_error  = sp_rot - ballPosX;
-        rot_d      = rot_error - rot_pError;
-        rot_pError = rot_error;
-        rot_w      = constrain(rot_error * rot_Kp + rot_d * rot_Kd, -100, 100);
-
-        fli_error  = spFli - ballPosY;
-        fli_i      = constrain(fli_i + fli_error, -100, 100);
-        fli_d      = fli_error - fli_pError;
-        fli_pError = fli_error;
-        fli_spd    = constrain(fli_error * fli_Kp
-                             + fli_i     * fli_Ki
-                             + fli_d     * fli_Kd, -100, 100);
-        if      (fli_spd >  0 && fli_spd <  minApproachSpd) fli_spd =  minApproachSpd;
-        else if (fli_spd < -0 && fli_spd > -minApproachSpd) fli_spd = -minApproachSpd;
-
-        holonomic(fli_spd, 90, rot_w);
-
-        if (abs(rot_error) < rotErrorGap && abs(fli_error) < flingErrorGap) {
-          wheel(0, 0, 0);
-          lastYaw = pvYaw;
-          resetPID();
-          state = ALIGN;
-        }
-        break;
-
-      // ── ALIGN: curve body to aim toward goal ──────────────
-      case ALIGN:
-        if (!hasBall) { state = SEARCH; break; }
-        {
-          float dir   = (pvYaw < 0) ? 0.0f  : 180.0f;
-          float omega = (pvYaw < 0) ? 25.0f : -25.0f;
-          holonomic(35, dir, omega * curveScale);
-        }
-        if (abs(pvYaw) < alignErrorGap && abs(sp_rot - ballPosX) < rotErrorGap)
-          state = APPROACH;
-        break;
-
-      // ── APPROACH: drive toward goal + shoot when close ────
-      case APPROACH:
-        if (!hasBall) { state = SEARCH; break; }
-        // ball drifted too far during ALIGN — re-approach before shooting
-        if (ballPosY < spFli - 30) { resetPID(); state = TRACK; break; }
-        if (goalY < goalFli) {
-          // goal not visible yet — push forward to find it
-          getIMU();
-          heading(90, 90, 0);
-          delay(555);
-          state = TRACK;
-          break;
-        }
-        {
-          float goalDeg = goalAngle(goalX, goalY, 1);
-          float spGoal  = -constrain((goalDeg - 90.0f) * 0.9f, -50.0f, 50.0f);
-          holonomic(approachSpd, goalDeg, spGoal * omegaScale);
-          if (goalY >= goalFli + shootOffset) state = SHOOT;
-        }
-        break;
-
-      // ── SHOOT: fire + reload + back to TRACK ─────────────
-      case SHOOT:
-        holonomic(50, 90, 0);
-        delay(150);
-        beep();
-        shoot();
-        wheel(0, 0, 0);
-        reload();
-        resetPID();
-        state = TRACK;
-        break;
+      case PS_SEARCH:   state = playSearch(hasBall);                                         break;
+      case PS_TRACK:    state = playTrack(hasBall);                                          break;
+      case PS_ALIGN:    state = playAlign(hasBall, orbitRadius);                              break;
+      case PS_APPROACH: state = playApproach(hasBall, driveSpeed, steerScale, shootDist); break;
+      case PS_SHOOT:    state = playShoot();                                                 break;
     }
   }
 }

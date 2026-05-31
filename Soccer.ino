@@ -15,7 +15,7 @@
 POP32_Huskylens huskylens;
 
 // ── Drive ─────────────────────────────────────────────────────
-#define degToRad    0.0174f
+#define degToRad    0.017453f
 const float sin30 = 0.5f;
 const float cos30 = 0.8660254f;
 
@@ -57,6 +57,14 @@ int   goalX, goalY;
 // ── IMU ───────────────────────────────────────────────────────
 float   pvYaw, lastYaw;
 uint8_t rxCnt = 0, rxBuf[8];
+
+// ── Vision filters ────────────────────────────────────────────
+#define ballSizeMin    10    // min block px — smaller is noise/too far
+#define ballSizeMax    200   // max block px — larger is false positive
+#define ballMaxJump    80    // max px move per frame — larger = teleport
+#define ballConfirmMin 2     // consecutive detections to accept as ball
+#define ballMissMax    3     // frames to hold ball after losing sight
+#define goalMissMax    5     // frames to hold goal after losing sight
 
 // ── Kicker ────────────────────────────────────────────────────
 #define limPin    A0

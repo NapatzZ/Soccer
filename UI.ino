@@ -3,9 +3,9 @@
 //  128×64 px  |  row = y/8  |  col = x pixel offset
 //
 //  Team visual language (monochrome OLED):
-//    YELLOW team  →  === borders  +  "(Y)" label
-//    BLUE   team  →  --- borders  +  "(B)" label
-//    Neutral      →  === borders
+//    YELLOW team  ->  === borders  +  "(Y)" label
+//    BLUE   team  ->  --- borders  +  "(B)" label
+//    Neutral      ->  === borders
 // ─────────────────────────────────────────────────────────────
 
 // Team info per menu index (k=0..6)
